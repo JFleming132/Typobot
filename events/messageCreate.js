@@ -6,16 +6,17 @@ const Server = require('../model/Server.js')
 const votesRequired = 1;
 spell.load('en');
 
+//callback function for if database can't connect
 mongoose.connection.on('error', function (err) {
   console.error(err)
 })
+//callback function for if database connects successfully
 mongoose.connection.on('connected', function() {
   console.log("mongoose connected successfully")
 });
+//connect to the database using private URI
 mongoose.connect(process.env.MONGODB_URI)
-
-
-
+//define callback function to return true only if reaction is a thumbs down
 const collectorFilter = (reaction, user) => {
 	return reaction.emoji.name === '👎';
 };
