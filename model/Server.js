@@ -1,23 +1,20 @@
 const mongoose = require("mongoose")
 const { Schema, model } = mongoose;
 
-const typoSchema = new Schema({
-  content: String
-}, {
-  timestamps: true
-})
-
-const userSchema = new Schema({
-  typocount: Number,
-  messageCount: Number,
-  typos: [typoSchema]
-})
-
 const serverSchema = new Schema({
   serverid: Number,
-  users: [userSchema],
+  users: {
+    type: Map,
+    of: new Schema({
+      typoCount : Number,
+      messageCount: Number,
+      typos: new Schema({
+        content: String
+      }, {timestamps: true})
+    })
+  },
   dictionary: [String]
-})
+}, {collection: "ServerData"})
 
-const Server = model('Typo', serverSchema);
-export default Server;
+const Server = model('ServerData', serverSchema);
+module.exports = Server;
