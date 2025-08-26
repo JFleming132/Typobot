@@ -1,10 +1,11 @@
-const {Events} = require('discord.js');
+const {Events, ActionRowBuilder, ButtonBuilder, ComponentType, MessageFlags} = require('discord.js');
 var mongoose = require('mongoose')
     , Admin = mongoose.mongo.Admin;
 const spell = require('spell-checker-js')
 const Server = require('../model/Server.js')
 const votesRequired = 1;
 spell.load('en');
+var voteTracker = {};
 
 //callback function for if database can't connect
 mongoose.connection.on('error', function (err) {
@@ -71,11 +72,47 @@ module.exports = {
             console.log(`Collected ${reaction.emoji.name} from ${user.tag}`); //debug message
             m.edit(check.join(" ") + `\n-# If this message is an error, react with 👎. If enough people react, it will be deleted after 60 seconds. Votes required: ${votesRequired - reaction.count}`);
             if (votesRequired <= reaction.count) { //if enough people have reacted with passing messages
-              m.channel.send({content: "Appeal approved. Deleting message..."}) //notify that the typo is being deleted
+              m.channel.send({content: "Appeal approved. Deleting message from database."}) //notify that the typo is being deleted
               .then( (m2) => { //once notification is confirmed sent
-                m.delete() //delete the original message
-                m2.delete() //delete the notification
-                //TODO: For each typo, initiate a poll asking if that word should be added to the dictionary
+                for (word of check) {
+                  
+                  message.channel.send({
+                    content: `is "${word}" a typo?`,
+                    components: [
+                      new ActionRowBuilder().addComponents(
+                        new ButtonBuilder()
+                          .setCustomId("typo")
+                          .setLabel('Yes, this is a typo.')
+                          .setStyle('Danger'),
+                        new ButtonBuilder()
+                          .setCustomId("notTypo")
+                          .setLabel('No, this is not a typo.')
+                          .setStyle('Success')
+                      )
+                    ]
+                  }).then((pollMessage) => {
+                    const pollCollector = pollMessage.createMessageComponentCollector({ componentType: ComponentType.Button, time: process.env.TYPO_VOTE_TIME});
+                    voteTracker[pollMessage.id] = 0;
+                    pollCollector.on("collect", pollCollected => {
+                      console.log(pollCollected.user)
+                      if (pollCollected.type === 3) {
+                        if (pollCollected.customId === 'typo') {
+                          voteTracker[pollMessage.id] = {...voteTracker[pollMessage.id], [pollCollected.user.id]: "Typo"};
+                        } else if (pollCollected.customId === 'notTypo') {
+                          voteTracker[pollMessage.id] = {...voteTracker[pollMessage.id], [pollCollected.user.id]: "Not a typo"};
+                        }
+                      }
+                      pollCollected.reply({content: `You voted: ${voteTracker[pollMessage.id][pollCollected.user.id]}`, flags: MessageFlags.ephemeral})
+                    })
+                    pollCollector.on("end", pollCollected => {
+                      //TODO: Tally votes from voteTracker, clear the relevant word from the object, and manage dictionary appropriately
+                      pollMessage.delete()
+                      console.log("poll ended")
+                      console.log(pollCollected)
+                      console.log(voteTracker)
+                    })
+                  })
+                }
                 //TODO: Reverse the logging of the typo in the users log
               })
             }
