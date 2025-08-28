@@ -5,7 +5,11 @@ const spell = require('spell-checker-js')
 const Server = require('../model/Server.js')
 const votesRequired = 1;
 spell.load('en');
-var voteTracker = {};
+var voteTracker = {}; //of the format {...pollMessageID: {...userID: Vote}}
+var voteTotal = 0; //keep running tally of votes
+
+//TODO: Refactor callbacks in thenables to improve readability
+//TODO: refactor mongoDB calls to separate file to allow client to be accessed from other files
 
 //callback function for if database can't connect
 mongoose.connection.on('error', function (err) {
@@ -126,7 +130,21 @@ module.exports = {
                     });
 
                     pollCollector.on("end", pollCollected => { //After the timeout has passed on vote time
-                      //TODO: Tally votes from voteTracker, clear the relevant word from the object, and manage dictionary appropriately
+                      voteTotal = 0;
+                      voteTracker[pollMessage.id].keys().forEach((userVote) => {
+                        if (voteTracker[userVote] === "Typo") {
+                          voteTotal = voteTotal - 1;
+                        } else if (voteTracker[userVote] === "Not a typo") {
+                          voteTotal = voteTotal + 1;
+                        }
+                      })
+                      if (voteTotal > 0) {
+                        //TODO: Add word to dictionary, if word not present
+                        //TODO: Send message saying poll succeeded
+                      } else {
+                        //TODO: Remove word from dictionary, if word present
+                        //TODO: Send message saying poll failed
+                      }
                       pollMessage.delete()
                       console.log("poll ended")
                       console.log(pollCollected)
