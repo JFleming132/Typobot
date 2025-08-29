@@ -1,18 +1,22 @@
 const mongoose = require("mongoose")
 const { Schema, model } = mongoose;
 
-const serverSchema = new Schema({
-  serverid: Number,
-  users: {
-    type: Map,
-    of: new Schema({
+const typos = new Schema({
+        content: String,
+        messageId: String
+      }, {timestamps: true}
+    )
+
+const users = new Schema({
+      userid: Number,
       typoCount : Number,
       messageCount: Number,
-      typos: new Schema({
-        content: String
-      }, {timestamps: true})
+      typos: [typos]
     })
-  },
+
+const serverSchema = new Schema({
+  serverid: Number,
+  users: [users],
   dictionary: [String]
 }, {collection: "ServerData"})
 

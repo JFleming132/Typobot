@@ -30,9 +30,9 @@ const collectorFilter = (reaction, user) => {
 async function getDictionary(guildid) {
   try {
     const result = await Server.findOne({serverid: guildid}, "dictionary");
+   
     // console.log("printing dictionary:") //debug message
     // console.log(result.dictionary) //debug message
-    //TODO: Add check for if specified server does not exist (and then create it with an empty dictionary)
     return result.dictionary;
   } catch (err) {
     console.error(err)
@@ -64,7 +64,29 @@ module.exports = {
 
     try {
       //TODO: check if message.author.username is a user in the server's document, and if not, create them
-      await Server.findOneAndUpdate({serverid : message.guild.id}, {$inc: {["users" + message.author.username]: 1}}) //increment author's message count by 1
+      const serverDoc = await Server.findOne(
+        {
+          serverid : message.guild.id
+        }, {users: 1, dictionary: 1}
+      ) //get the doc representing the server
+      if (serverDoc === undefined) { //if server not found
+        await Server.insertOne({ //create server
+          serverid: guildid,
+          users: {},
+          dictionary: []
+        })
+      }
+      if (!serverDoc.users.some(user => user.userid == message.author.id)) { //if user not found in server
+        serverDoc.users.push({userid: message.author.id, typoCount: 0, messageCount: 0, typos: []})
+        serverDoc.markModified("users"); 
+        await serverDoc.save(); //add user to server
+      }
+
+      const userDoc = serverDoc.users.find((user) => user.userid == message.author.id)
+
+      userDoc.messageCount = userDoc.messageCount + 1;
+      serverDoc.save();
+
       const check = await filterWords(message) //remove all words that aren't typos or that are explicitely allowed
       //console.log(check); //debug message
       
@@ -77,8 +99,13 @@ module.exports = {
             messageReference: `${message.id}`
           }
         })
-        .then((m) => { //once the message is confirmed sent (promise fulfilled)
-          //TODO: Log typo in [serverid].users.[user].typos and update [serverid].users.[user].typoCount
+        .then(async (m) => { //once the message is confirmed sent (promise fulfilled)
+          //console.log(serverDoc) //Debug message
+          
+          userDoc.typoCount = userDoc.typoCount + 1;
+          userDoc.typos.push({content: message.content, messageId: message.id})
+          await serverDoc.save();
+          
           const collector = m.createReactionCollector({ //collect reactions on the bots message
             filter: collectorFilter, //but only ones that pass the filter
             time: process.env.APPEAL_TIMEOUT //and only for so long
@@ -112,10 +139,11 @@ module.exports = {
                       time: process.env.TYPO_VOTE_TIME //but only for a certain time
                     });
 
+                    voteTracker = {};
                     voteTracker[pollMessage.id] = {}; //initialize voteTracker entry for this word
 
                     pollCollector.on("collect", pollCollected => { //whenever the message is interacted with at all
-                      // console.log(pollCollected.user) //debug message
+                      //console.log(pollCollected.customId) //debug message
                       if (pollCollected.type === 3) { //if that interaction was a button being pushed
                         if (pollCollected.customId === 'typo') { //record the vote appropriately
                           voteTracker[pollMessage.id] = {...voteTracker[pollMessage.id], [pollCollected.user.id]: "Typo"};
@@ -131,28 +159,45 @@ module.exports = {
 
                     pollCollector.on("end", pollCollected => { //After the timeout has passed on vote time
                       voteTotal = 0;
-                      voteTracker[pollMessage.id].keys().forEach((userVote) => {
-                        if (voteTracker[userVote] === "Typo") {
+                      console.log(voteTracker)
+                      Object.values(voteTracker[pollMessage.id]).forEach((userVote) => {
+                        //console.log(userVote) //debug message
+                        if (userVote === "Typo") {
                           voteTotal = voteTotal - 1;
-                        } else if (voteTracker[userVote] === "Not a typo") {
+                          //console.log("Typo vote") //debug message
+                        } else if (userVote === "Not a typo") {
                           voteTotal = voteTotal + 1;
+                          //console.log("not a typo vote") //debug message
                         }
                       })
-                      if (voteTotal > 0) {
-                        //TODO: Add word to dictionary, if word not present
-                        //TODO: Send message saying poll succeeded
+                      console.log(voteTotal)
+                      if (voteTotal <= 0) {
+                        if (serverDoc.dictionary.includes(word)) {
+                          serverDoc.dictionary.pop(word)
+                          serverDoc.save()
+                          message.channel.send({content: `${word} Vote result: Typo. Dictionary updated.`})
+                        } else {
+                          message.channel.send({content: `${word} Vote result: Typo.`})
+                        }
+                        
                       } else {
-                        //TODO: Remove word from dictionary, if word present
-                        //TODO: Send message saying poll failed
+                        if (!(serverDoc.dictionary.includes(word))) {
+                          serverDoc.dictionary.push(word)
+                          serverDoc.save()
+                          message.channel.send({content: `${word} Vote result: Not a typo. Dictionary updated.`})
+                        } else {
+                          message.channel.send({content: `${word} Vote result: Not a typo.`})
+                        }
                       }
                       pollMessage.delete()
-                      console.log("poll ended")
-                      console.log(pollCollected)
-                      console.log(voteTracker)
+                      
                     })
                   })
                 }
-                //TODO: Reverse the logging of the typo in the users log
+                userDoc.typoCount = userDoc.typoCount - 1;
+                userDoc.typos = userDoc.typos.filter((typo) => (typo.messageId !== message.id))
+                serverDoc.save()
+                m2.delete();
               })
             }
           });
