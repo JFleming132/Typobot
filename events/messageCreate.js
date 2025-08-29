@@ -46,13 +46,14 @@ async function filterWords(msg) {
   const dictionary = await getDictionary(msg.guild.id); //load dictionary into local array variable
   const check = spell.check(msg.content) //get all mispelled words according to spell-checker.js
     .filter((word) => {
-      if (dictionary.includes(word)) { //filter out all the words that are in the dictionary
+      if (dictionary.includes(word.toUpperCase())) { //filter out all the words that are in the dictionary
         return false;
       } else { //filter out all numbers
         if (/([-+/*';:.,\d])+/.test(word)) {
           return false;
         }
       }
+      //TODO: filter for emojis and names
       //Here is where additional filters would go
       return true;
     })
@@ -188,8 +189,8 @@ module.exports = {
                       })
                       console.log(voteTotal)
                       if (voteTotal <= 0) {
-                        if (serverDoc.dictionary.includes(word)) {
-                          serverDoc.dictionary.pop(word)
+                        if (serverDoc.dictionary.includes(word.toUpperCase())) {
+                          serverDoc.dictionary.pop(word.toUpperCase)
                           serverDoc.save()
                           message.channel.send({content: `${word} Vote result: Typo. Dictionary updated.`})
                         } else {
@@ -197,8 +198,8 @@ module.exports = {
                         }
                         
                       } else {
-                        if (!(serverDoc.dictionary.includes(word))) {
-                          serverDoc.dictionary.push(word)
+                        if (!(serverDoc.dictionary.includes(word.toUpperCase()))) {
+                          serverDoc.dictionary.push(word.toUpperCase())
                           serverDoc.save()
                           message.channel.send({content: `${word} Vote result: Not a typo. Dictionary updated.`})
                         } else {
