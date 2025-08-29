@@ -3,7 +3,7 @@ var mongoose = require('mongoose')
     , Admin = mongoose.mongo.Admin;
 const spell = require('spell-checker-js')
 const Server = require('../model/Server.js')
-const votesRequired = 1;
+const votesRequired = 3;
 spell.load('en');
 var voteTracker = {}; //of the format {...pollMessageID: {...userID: Vote}}
 var voteTotal = 0; //keep running tally of votes
@@ -45,8 +45,18 @@ async function filterWords(msg) {
   try {
   const dictionary = await getDictionary(msg.guild.id); //load dictionary into local array variable
   const check = spell.check(msg.content) //get all mispelled words according to spell-checker.js
-    .filter((word) => !dictionary.includes(word)); //filter out all the words that are in the dictionary
-  //console.log(check) //debug message
+    .filter((word) => {
+      if (dictionary.includes(word)) { //filter out all the words that are in the dictionary
+        return false;
+      } else { //filter out all numbers
+        if (/([-+/*';:.,\d])+/.test(word)) {
+          return false;
+        }
+      }
+      //Here is where additional filters would go
+      return true;
+    })
+        //console.log(check) //debug message
   return check; //return final filtered list
   } catch (err) {
     console.error(err)
@@ -69,12 +79,18 @@ module.exports = {
           serverid : message.guild.id
         }, {users: 1, dictionary: 1}
       ) //get the doc representing the server
-      if (serverDoc === undefined) { //if server not found
+      if (serverDoc === null) { //if server not found
+        console.log("attempting to save new server")
         await Server.insertOne({ //create server
-          serverid: guildid,
+          serverid: message.guild.id,
           users: {},
           dictionary: []
         })
+        serverDoc = {
+          serverid: message.guild.id,
+          users: {},
+          dictionary: []
+        }
       }
       if (!serverDoc.users.some(user => user.userid == message.author.id)) { //if user not found in server
         serverDoc.users.push({userid: message.author.id, typoCount: 0, messageCount: 0, typos: []})
