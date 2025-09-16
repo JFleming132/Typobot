@@ -40,25 +40,29 @@ async function getDictionary(guildid) {
   }
 }
 
+
+
 //helper function to filter out all allowed words from the typo list
 async function filterWords(msg) {
   try {
-  const dictionary = await getDictionary(msg.guild.id); //load dictionary into local array variable
-  const check = spell.check(msg.content) //get all mispelled words according to spell-checker.js
-    .filter((word) => {
-      if (dictionary.includes(word.toUpperCase())) { //filter out all the words that are in the dictionary
-        return false;
-      } else { //filter out all numbers
-        if (/([-+/*';:.,\d])+/.test(word)) {
+    //TODO: Probably split messages into words, and check for things like names or URLS BEFORE going to the spellcheck library
+    //maybe iterate through an array of regex expressions?
+    const dictionary = await getDictionary(msg.guild.id); //load dictionary into local array variable
+    const check = spell.check(msg.content) //get all mispelled words according to spell-checker.js
+      .filter((word) => {
+        if (dictionary.includes(word.toUpperCase())) { //filter out all the words that are in the dictionary
           return false;
+        } else { //filter out all numbers
+          if (/([-+/*';:.,\d])+/.test(word)) {
+            return false;
+          }
         }
-      }
-      //TODO: filter for emojis and names
-      //Here is where additional filters would go
-      return true;
-    })
-        //console.log(check) //debug message
-  return check; //return final filtered list
+        //TODO: filter for emojis and names
+        //Here is where additional filters would go
+        return true;
+      })
+          //console.log(check) //debug message
+    return check; //return final filtered list
   } catch (err) {
     console.error(err)
     return []
@@ -130,86 +134,88 @@ module.exports = {
           
           collector.on('collect', (reaction, user) => { //upon collecting a reaction that passes the collectorFilter
             //console.log(`Collected ${reaction.emoji.name} from ${user.tag}`); //debug message
-            m.edit(check.join(" ") + `\n-# If this message is an error, react with 👎. If enough people react, it will be deleted after 60 seconds. Votes required: ${votesRequired - reaction.count}`);
+            m.edit(check.join(" ") + `\n-# If this message is an error, react with 👎. If enough people react, it will be deleted after 6 hours. Votes required: ${votesRequired - reaction.count}`);
             if (votesRequired <= reaction.count) { //if enough people have reacted with 👎
               m.channel.send({content: "Appeal approved. Deleting message from database."}) //notify that the typo is being deleted
               .then( (m2) => { //once notification is confirmed sent
                 for (word of check) { //for each mispelled word
-                  message.channel.send({ //send a message with voting buttons
-                    content: `is "${word}" a typo?`,
-                    components: [
-                      new ActionRowBuilder().addComponents(
-                        new ButtonBuilder()
-                          .setCustomId("typo")
-                          .setLabel('Yes, this is a typo.')
-                          .setStyle('Danger'),
-                        new ButtonBuilder()
-                          .setCustomId("notTypo")
-                          .setLabel('No, this is not a typo.')
-                          .setStyle('Success')
-                      )
-                    ]
-                  })
-                  .then((pollMessage) => { //once the message sends,
-                    const pollCollector = pollMessage.createMessageComponentCollector({ //collect button responses 
-                      componentType: ComponentType.Button,
-                      time: process.env.TYPO_VOTE_TIME //but only for a certain time
-                    });
-
-                    voteTracker = {};
-                    voteTracker[pollMessage.id] = {}; //initialize voteTracker entry for this word
-
-                    pollCollector.on("collect", pollCollected => { //whenever the message is interacted with at all
-                      //console.log(pollCollected.customId) //debug message
-                      if (pollCollected.type === 3) { //if that interaction was a button being pushed
-                        if (pollCollected.customId === 'typo') { //record the vote appropriately
-                          voteTracker[pollMessage.id] = {...voteTracker[pollMessage.id], [pollCollected.user.id]: "Typo"};
-                        } else if (pollCollected.customId === 'notTypo') {
-                          voteTracker[pollMessage.id] = {...voteTracker[pollMessage.id], [pollCollected.user.id]: "Not a typo"};
-                        }
-                      }
-                      pollCollected.reply({
-                        content: `You voted: ${voteTracker[pollMessage.id][pollCollected.user.id]}`,
-                        flags: MessageFlags.Ephemeral
-                      }); //finish interaction with a reply only the voter can see, confirming their vote
-                    });
-
-                    pollCollector.on("end", pollCollected => { //After the timeout has passed on vote time
-                      voteTotal = 0;
-                      console.log(voteTracker)
-                      Object.values(voteTracker[pollMessage.id]).forEach((userVote) => {
-                        //console.log(userVote) //debug message
-                        if (userVote === "Typo") {
-                          voteTotal = voteTotal - 1;
-                          //console.log("Typo vote") //debug message
-                        } else if (userVote === "Not a typo") {
-                          voteTotal = voteTotal + 1;
-                          //console.log("not a typo vote") //debug message
-                        }
-                      })
-                      console.log(voteTotal)
-                      if (voteTotal <= 0) {
-                        if (serverDoc.dictionary.includes(word.toUpperCase())) {
-                          serverDoc.dictionary.pop(word.toUpperCase)
-                          serverDoc.save()
-                          message.channel.send({content: `${word} Vote result: Typo. Dictionary updated.`})
-                        } else {
-                          message.channel.send({content: `${word} Vote result: Typo.`})
-                        }
-                        
-                      } else {
-                        if (!(serverDoc.dictionary.includes(word.toUpperCase()))) {
-                          serverDoc.dictionary.push(word.toUpperCase())
-                          serverDoc.save()
-                          message.channel.send({content: `${word} Vote result: Not a typo. Dictionary updated.`})
-                        } else {
-                          message.channel.send({content: `${word} Vote result: Not a typo.`})
-                        }
-                      }
-                      pollMessage.delete()
-                      
+                  if (voteTracker.keys().includes(word)) {
+                    capsWord = word.toUpperCase()
+                    message.channel.send({ //send a message with voting buttons
+                      content: `is "${word}" a typo? Vote closes in 1 hour.`,
+                      components: [
+                        new ActionRowBuilder().addComponents(
+                          new ButtonBuilder()
+                            .setCustomId("typo")
+                            .setLabel('Yes, this is a typo.')
+                            .setStyle('Danger'),
+                          new ButtonBuilder()
+                            .setCustomId("notTypo")
+                            .setLabel('No, this is not a typo.')
+                            .setStyle('Success')
+                        )
+                      ]
                     })
-                  })
+                    .then((pollMessage) => { //once the message sends,
+                      const pollCollector = pollMessage.createMessageComponentCollector({ //collect button responses 
+                        componentType: ComponentType.Button,
+                        time: process.env.TYPO_VOTE_TIME //but only for a certain time
+                      });
+
+                      voteTracker[capsWord] = {}; //initialize voteTracker entry for this word
+
+                      pollCollector.on("collect", pollCollected => { //whenever the message is interacted with at all
+                        //console.log(pollCollected.customId) //debug message
+                        if (pollCollected.type === 3) { //if that interaction was a button being pushed
+                          if (pollCollected.customId === 'typo') { //record the vote appropriately
+                            voteTracker[capsWord] = {...voteTracker[capsWord], [pollCollected.user.id]: "Typo"};
+                          } else if (pollCollected.customId === 'notTypo') {
+                            voteTracker[capsWord] = {...voteTracker[capsWord], [pollCollected.user.id]: "Not a typo"};
+                          }
+                        }
+                        pollCollected.reply({
+                          content: `You voted: ${voteTracker[capsWord][pollCollected.user.id]}`,
+                          flags: MessageFlags.Ephemeral
+                        }); //finish interaction with a reply only the voter can see, confirming their vote
+                      });
+
+                      pollCollector.on("end", pollCollected => { //After the timeout has passed on vote time
+                        voteTotal = 0;
+                        console.log(voteTracker)
+                        Object.values(voteTracker[capsWord]).forEach((userVote) => {
+                          //console.log(userVote) //debug message
+                          if (userVote === "Typo") {
+                            voteTotal = voteTotal - 1;
+                            //console.log("Typo vote") //debug message
+                          } else if (userVote === "Not a typo") {
+                            voteTotal = voteTotal + 1;
+                            //console.log("not a typo vote") //debug message
+                          }
+                        })
+                        console.log(voteTotal)
+                        if (voteTotal <= 0) {
+                          if (serverDoc.dictionary.includes(word.toUpperCase())) {
+                            serverDoc.dictionary.pop(word.toUpperCase)
+                            serverDoc.save()
+                            message.channel.send({content: `${word} Vote result: Typo. Dictionary updated.`})
+                          } else {
+                            message.channel.send({content: `${word} Vote result: Typo.`})
+                          }
+                          
+                        } else {
+                          if (!(serverDoc.dictionary.includes(word.toUpperCase()))) {
+                            serverDoc.dictionary.push(word.toUpperCase())
+                            serverDoc.save()
+                            message.channel.send({content: `${word} Vote result: Not a typo. Dictionary updated.`})
+                          } else {
+                            message.channel.send({content: `${word} Vote result: Not a typo.`})
+                          }
+                        }
+                        pollMessage.delete()
+                        delete voteTracker[capsWord];
+                      })
+                    })
+                  }
                 }
                 userDoc.typoCount = userDoc.typoCount - 1;
                 userDoc.typos = userDoc.typos.filter((typo) => (typo.messageId !== message.id))
